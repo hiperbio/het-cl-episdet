@@ -58,16 +58,22 @@ $ cd <some_folder> && make
 
 ## Usage example
 
-Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
+Heterogeneous/GPU-only versions: Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
 
 ```bash
-$ ./<some_binary> 4000 1000 
+$ ./epi_3way 4000 1000 
 ```
 
-Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
+Heterogeneous/GPU-only versions: Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
 
 ```bash
-$ ./<some_binary> <some_dataset>
+$ ./epi_3way <some_dataset>
+```
+
+CPU-only version: running a 3-way search with a synthetic dataset with 1000 SNPs and 4000 samples:
+
+```bash
+$ ./epi 4000 1000 3
 ```
 The application receives the input file in a binarized format. 
 
