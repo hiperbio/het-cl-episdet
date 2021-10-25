@@ -2,11 +2,11 @@
 
 <p>
   <a href="https://doi.org/10.1007/978-3-030-57675-2_38" alt="Publication">
-    <img src="http://img.shields.io/badge/DOI-10.1007/978-3-030-57675-2_38-blue.svg"/></a>
+    <img src="http://img.shields.io/badge/DOI-10.1007/978-3-030-57675-2-38-blue.svg"/></a>
     
 </p>
 
-This repository contains the implementations of exhaustive epistasis detection for second and third-order interaction searches, targeting Intel CPUs, GPUs and CPU+GPU systems. It supports single-objective and multi-objective evaluations with K2 score and Mutual Entropy scoring functions. The CPU implementations are parallelized by using OpenMP, while GPU kernels are deployed with the OpenCL programming model. To the best of our knowledge, this is the first work to address epistasis detection approaches in the context of heterogeneous systems.
+This repository contains the implementations of exhaustive epistasis detection for second and third-order interaction searches, targeting Intel CPUs, GPUs and CPU+GPU systems. It supports single-objective and multi-objective evaluations with K2 score and Mutual Entropy scoring functions. The CPU implementations are parallelized by using OpenMP, while GPU kernels are deployed with the OpenCL programming model.
 
 ## What is Epistasis Detection?
 
