@@ -2,7 +2,7 @@
 
 <p>
   <a href="https://doi.org/10.1007/978-3-030-57675-2_38" alt="Publication">
-    <img src="http://img.shields.io/badge/DOI-10.1109/TPDS.2021.3060322-blue.svg"/></a>
+    <img src="http://img.shields.io/badge/DOI-10.1007/978-3-030-57675-2_38-blue.svg"/></a>
     
 </p>
 
