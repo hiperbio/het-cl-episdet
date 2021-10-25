@@ -29,7 +29,7 @@ Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using
 ```bash
 $ cd <some_folder> && make
 ```
-*3-way:
+* 3-way:
 ```bash
 $ cd <some_folder> && make
 ```
@@ -40,7 +40,7 @@ Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using
 ```bash
 $ cd <some_folder> && make
 ```
-*3-way:
+* 3-way:
 ```bash
 $ cd <some_folder> && make
 ```
@@ -51,7 +51,7 @@ Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using
 ```bash
 $ cd <some_folder> && make
 ```
-*3-way:
+* 3-way:
 ```bash
 $ cd <some_folder> && make
 ```
