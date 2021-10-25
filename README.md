@@ -1,6 +1,12 @@
 # het-cl-episdet
 
 <p>
+  <a href="https://doi.org/10.1109/TPDS.2021.3060322" alt="Publication">
+    <img src="http://img.shields.io/badge/DOI-10.1109/TPDS.2021.3060322-blue.svg"/></a>
+    
+</p>
+
+<p>
   <a href="https://doi.org/10.1007/978-3-030-57675-2_38" alt="Publication">
     <img src="http://img.shields.io/badge/DOI-10.1007/978-3-030-57675-2_38-blue.svg"/></a>
     
@@ -61,7 +67,7 @@ $ cd <some_folder> && make
 Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
 
 ```bash
-$ ./<some_binary> 262144 4096 
+$ ./<some_binary> 4000 1000 
 ```
 
 Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
