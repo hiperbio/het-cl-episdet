@@ -82,22 +82,28 @@ $ cd <folder>/mutual_entropy && make
 
 ## Usage example
 
-Heterogeneous/GPU-only versions: Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
+Scheduler/Heterogeneous/GPU-only versions: Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
 
 ```bash
 $ ./epi_3way 4000 1000 
 ```
 
-Heterogeneous/GPU-only versions: Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
+Scheduler/Heterogeneous/GPU-only versions: Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
 
 ```bash
 $ ./epi_3way <some_dataset>
 ```
 
-CPU-only version: running a 3-way search with a synthetic dataset with 1000 SNPs and 4000 samples:
+CPU-only version: Running a 3-way search with a synthetic dataset with 1000 SNPs and 4000 samples:
 
 ```bash
 $ ./epi 4000 1000 3
+```
+
+CPU-only version: Running a 3-way search with a dataset in .txt format with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples (2000 controls and 2000 cases):
+
+```bash
+$ ./epi <some_dataset> 3
 ```
 The application receives the input file in a binarized format. 
 
