@@ -1,7 +1,7 @@
 
 CC = icc
-FLAGS = -I/opt/intel/inteloneapi/compiler/latest/linux/lib/oclfpga/host/include/ -lOpenCL -O3 -g -std=c++11 -qopenmp
-BIN = epi_3way
+FLAGS = -O3 -g -qopenmp
+BIN = epi
 OBJ = $(BIN).o
 
 

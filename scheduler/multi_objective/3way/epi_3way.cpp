@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <cstring>
 #include <sstream>
 #include <cmath>
@@ -12,14 +13,17 @@
 // Macros
 #define TABLE_MAX_SIZE 748
 #define TABLE_ERROR -0.0810
-#define MAX_K 2
-#define MAX_R_SIZE 9 // = 3^MAX_K
+#define TWOLOG_MAX_SIZE 1500
+#define MAX_K 3
+#define MAX_R_SIZE 27 // = 3^MAX_K
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #define MY_DEVICE_TYPE CL_DEVICE_TYPE_GPU
 #define N_WORK_ITEMS 76800
 #define N_WORK_ITEMS_PER_GROUP 256
+#define INITIAL_CHUNK_SIZE 1000
 
-// SNP class
+
+// Classes
 class SNP
 {
 	public:
@@ -37,6 +41,18 @@ class SNP
 	void input_data(const char* path);	// input data reader
     void generate_data(int num_pac, int num_snp);
 	void destroy();						// destructor
+};
+
+class solution
+{
+	public:
+	
+	int* set;
+	double me_score;
+	double k2_score;
+	
+	void input(int* sol_set, double sol_k2_score, double sol_me_score);
+	void destroy();
 };
 
 // SNP destructor
@@ -332,44 +348,31 @@ void SNP::input_data(const char* path)
 	// end
 }
 
+// Inputs data into solution class
+void solution::input(int* sol_set, double sol_k2_score, double sol_me_score)
+{
+	set = new int[MAX_K];
+	
+	for(int i = 0; i < MAX_K; i++)
+		set[i] = sol_set[i];
+	
+	k2_score = sol_k2_score;
+	me_score = sol_me_score;
+}
+
+// Solution class destructor
+void solution::destroy()
+{
+	delete set;
+}
+
 // Global variables
 SNP SNPs;
-double *addlogtable;
+double *addlogtable, *twologtable, hy_me, log2total_me;
 double time_begin, time_end;
+int total_me;
 
 // Functions
-
-// Returns value from addlog table or approximation, depending on number
-double addlog(int n)
-{
-	if(n < TABLE_MAX_SIZE)
-		return addlogtable[n];
-	else
-	{
-		double x = (n + 0.5)*log(n) - (n - 1)*log(exp(1)) + TABLE_ERROR;
-		return x;
-	}
-}
-
-// Computes addlog table
-double my_factorial(int n)
-{
-	double i;
-	double z = 0;
-
-	if(n < 0)
-	{
-		printf("Error: n should be a non-negative number.\n");
-		return 0;
-	}
-	if(n == 0)
-		return 0;
-	if(n == 1)
-		return 0;
-
-	z = addlogtable[n - 1] + log(n);
-	return z;
-}
 
 // Computes n choose r
 unsigned int choose(unsigned int n, unsigned int k)
@@ -390,12 +393,123 @@ unsigned int choose(unsigned int n, unsigned int k)
     return result;
 }
 
+// Computes the mth combination in the set of n choose r combinations
+void getcombination(int* comb, int n, int r, int m)
+{
+	int a, b, x, i;
+
+	a = n;
+	b = r;
+	x = choose(n, r) - 1 - m;
+
+	for(i = 0; i < r; i++)
+	{
+		a--;
+		while(choose(a, b) > x)
+			a--;
+		comb[i] = n - 1 - a;
+		x = x - choose(a, b);
+		b--;
+	}
+}
+
+// Receives solution and inserts/discards it accordingly
+void add_sol(std::vector<solution>& sols, solution* sol)
+{
+	int i;
+	bool flag1, flag2;
+	
+	// search array of solutions for dominance
+	flag1 = false;
+	flag2 = false;
+	for(i = 0; i < sols.size(); i++)
+	{
+		if(sol->me_score >= sols[i].me_score && sol->k2_score >= sols[i].k2_score)
+		{
+			flag2 = true;
+			break;
+		}
+		else if(sol->me_score <= sols[i].me_score && sol->k2_score <= sols[i].k2_score)
+		{
+			if(sol->me_score < sols[i].me_score || sol->k2_score < sols[i].k2_score)
+			{
+				// if current solution is completely dominated by new solution, discard it
+				flag1 = true;
+				sols[i].destroy();
+				sols.erase(sols.begin() + i);
+				i--;
+			}
+		}
+		else if(sol->me_score < sols[i].me_score || sol->k2_score < sols[i].k2_score)
+		{
+			// if not completely dominated, the current solution is kept
+			flag1 = true;
+		}
+	}
+	
+	// if solution is co-dominant with/dominates any other in the solutions array, add it to array
+	if((flag1 == true || sols.size() == 0) && flag2 == false)
+	{
+		solution newsol;
+		newsol.input(sol->set, sol->k2_score, sol->me_score);
+		sols.push_back(newsol);
+	}
+	
+	// end
+	sol->destroy();
+}
+
+// Returns value from addlog table or approximation, depending on number
+double addlog(int n)
+{
+	if(n < TABLE_MAX_SIZE)
+		return addlogtable[n];
+	else
+	{
+		double x = (n + 0.5)*log(n) - (n - 1)*log(exp(1)) + TABLE_ERROR;
+		return x;
+	}
+}
+
+// Returns value from twolog table or log2() result, depending on number
+double twolog(int n)
+{
+	if(n < TWOLOG_MAX_SIZE)
+		return twologtable[n];
+	else
+	{
+		double x = log2(n);
+		return x;
+	}
+}
+
+// Computes addlog table
+double my_factorial(int n)
+{
+	double z = 0;
+
+	if(n < 0)
+	{
+		printf("Error: n should be a non-negative number.\n");
+		return 0;
+	}
+	if(n == 0)
+		return 0;
+	if(n == 1)
+		return 0;
+
+	z = addlogtable[n - 1] + log(n);
+	return z;
+}
+
+
 // Main
 int main(int argc, char** argv)
 {
-    int i, i0, i1, i2, j, k, addlogsize, offset;
-
-    k = 2;
+    int i, j, k, addlogsize, twologsize, offset;
+	std::vector<solution> final_sols;
+	
+    k = 3;
 	if(argc == 3)
     {
         int num_pac = atoi(argv[1]);
@@ -406,11 +520,12 @@ int main(int argc, char** argv)
     {
         SNPs.input_data(argv[1]);
     }
-    int sol[k];
 
-	// create buffer with information to transfer
-	int ncombs[N_WORK_ITEMS], ncomb;
-	ncomb = choose(SNPs.locisize, k);
+	// compute global variables
+	total_me = SNPs.samplesize;
+	log2total_me = log2(total_me);
+	hy_me = - (1.0*SNPs.classvalues[0]/total_me) * log2((1.0*SNPs.classvalues[0]/total_me)) - (1.0*SNPs.classvalues[1]/total_me) * log2((1.0*SNPs.classvalues[1]/total_me));
+	int total_combs = choose(SNPs.locisize, k);
 
     // get OpenCL platform and device
     std::vector<cl::Platform> all_platforms;
@@ -445,18 +560,14 @@ int main(int argc, char** argv)
     cl::Program::Sources program_source;
     program_source.push_back({program_string.c_str(), program_string.length() + 1});
     cl::Program program(context, program_source);
-
-    char build_options[100];
-	sprintf(build_options, "-D NCOLS=%d -D SIZE=%d -D NCOMB=%d", SNPs.ncols, SNPs.locisize, ncomb);
+    
+	char build_options[100];
+	sprintf(build_options, "-D NCOLS=%d -D HY_ME=%f -D LOG2TOTAL_ME=%f -D TOTAL_ME=%d", SNPs.ncols, hy_me, log2total_me, total_me);
     if(program.build(build_options) != CL_SUCCESS)
     {
         std::cout << "Error building:" << std::endl << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(default_device) << std::endl;
         exit(1);
     }
-
-	// Create OpenCL kernels
-	cl::Kernel kernel_bayesian(program, "kernel_bayesian");
-	cl::Kernel kernel_combo(program, "kernel_combo");
 
     // create OpenCL command queue
     cl::CommandQueue queue(context, default_device);
@@ -466,15 +577,21 @@ int main(int argc, char** argv)
 	addlogtable = new double[addlogsize];
 	for(i = 0; i < addlogsize; i++)
 		addlogtable[i] = my_factorial(i);
+	
+	// create twolog table (up to TWOLOG_MAX_SIZE positions at max)
+	twologsize = TWOLOG_MAX_SIZE;
+	twologtable = new double[twologsize];
+	for(i = 1; i < twologsize; i++)
+		twologtable[i] = log2(i);
+    twologtable[0] = 0.0f;
 
     // create OpenCL buffers on device
-    cl::Buffer dev_scores(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * sizeof(double));
-    cl::Buffer dev_solutions(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
-    cl::Buffer dev_combs(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
-	cl::Buffer dev_ncombs(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * sizeof(int));
+    cl::Buffer dev_scores(context, CL_MEM_READ_WRITE, 2 * N_WORK_ITEMS * sizeof(double));
+	cl::Buffer dev_combinations(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
     cl::Buffer dev_data(context, CL_MEM_READ_ONLY, (SNPs.nrows - 1) * SNPs.ncols * 3 * sizeof(unsigned int));
     cl::Buffer dev_states(context, CL_MEM_READ_ONLY, SNPs.ncols * sizeof(unsigned int));
     cl::Buffer dev_addlogtable(context, CL_MEM_READ_ONLY, addlogsize * sizeof(double));
+	cl::Buffer dev_twologtable(context, CL_MEM_READ_ONLY, twologsize * sizeof(double));
 
     // copy buffers from host to device
 	offset = 0;
@@ -488,64 +605,125 @@ int main(int argc, char** argv)
 	}
 	queue.enqueueWriteBuffer(dev_states, CL_TRUE, 0, SNPs.ncols * sizeof(unsigned int), SNPs.states);
     queue.enqueueWriteBuffer(dev_addlogtable, CL_TRUE, 0, addlogsize * sizeof(double), addlogtable);
+	queue.enqueueWriteBuffer(dev_twologtable, CL_TRUE, 0, twologsize * sizeof(double), twologtable);
 
-	// copy indexes of first combinations to process
-	for(i = 0; i < N_WORK_ITEMS; i++)
-		ncombs[i] = i;
-	queue.enqueueWriteBuffer(dev_ncombs, CL_TRUE, 0, N_WORK_ITEMS * sizeof(int), ncombs);
+	// set buffer containing scores in device
+	queue.enqueueFillBuffer(dev_scores, 100000000.0, 0, 2 * N_WORK_ITEMS * sizeof(double));
 
-	// set buffer in device
-	queue.enqueueFillBuffer(dev_scores, 100000000.0, 0, N_WORK_ITEMS * sizeof(double));
-
-	// setup OpenCL kernel calls
+	// setup OpenCL kernel call
+    cl::Kernel kernel_bayesian(program, "kernel_bayesian");
     kernel_bayesian.setArg(0, dev_scores);
-    kernel_bayesian.setArg(1, dev_solutions);
-	kernel_bayesian.setArg(2, dev_combs);
-	kernel_bayesian.setArg(3, dev_ncombs);
-    kernel_bayesian.setArg(4, dev_data);
-    kernel_bayesian.setArg(5, dev_states);
-    kernel_bayesian.setArg(6, dev_addlogtable);
-	kernel_combo.setArg(0, dev_combs);
-	kernel_combo.setArg(1, dev_ncombs);
+	kernel_bayesian.setArg(1, dev_combinations);
+    kernel_bayesian.setArg(2, dev_data);
+    kernel_bayesian.setArg(3, dev_states);
+    kernel_bayesian.setArg(4, dev_addlogtable);
+	kernel_bayesian.setArg(5, dev_twologtable);
 
 	// create buffers to receive results
-    double score, scores[N_WORK_ITEMS];
-    int sols[N_WORK_ITEMS][MAX_K];
+    double scores_gpu[N_WORK_ITEMS][2];
 	for(i = 0; i < N_WORK_ITEMS; i++)
-		scores[i] = 100000000.0;
+	{
+		scores_gpu[i][0] = 100000000.0;
+		scores_gpu[i][1] = 100000000.0;
+	}
 
-	// run kernel
+	// create buffer with information to transfer
+	int combinations_gpu[N_WORK_ITEMS][k], combinations_cpu;
+	int comb[k], a, b, c, i0, i1, i2;
+	double curr_scores[2];
+	std::vector<solution> sols;
+	solution sol;
+
+	// start counting time
 	std::cout << "Starting computation of K2 Score..." << std::endl;
 	time_begin = omp_get_wtime();
-	for(i = 0; i < ncomb/N_WORK_ITEMS + 1; i++)
-	{
-		queue.enqueueNDRangeKernel(kernel_combo, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
-		queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
-	}
-	queue.finish();
 
-    // copy results from device to host
-    queue.enqueueReadBuffer(dev_scores, CL_TRUE, 0, N_WORK_ITEMS * sizeof(double), scores);
-    queue.enqueueReadBuffer(dev_solutions, CL_TRUE, 0, N_WORK_ITEMS * MAX_K * sizeof(int), (*sols));
+	// fill buffer with combinations
+	a = 0;
+	for(i0 = 0; i0 <= SNPs.locisize - k; i0++)
+	{
+		for(i1 = i0 + 1; i1 < SNPs.locisize; i1++)
+		{
+			for(i2 = i1 + 1; i2 < SNPs.locisize; i2++)
+			{
+				// update GPU solutions
+				for(b = 0; b < k; b++)
+					comb[b] = combinations_gpu[a][b];
+				curr_scores[0] = scores_gpu[a][0];
+				curr_scores[1] = scores_gpu[a][1];
+				// add solution to array
+				sol.input(comb, curr_scores[0], curr_scores[1]);
+				add_sol(sols, &sol);
+
+				combinations_gpu[a][0] = i0;
+				combinations_gpu[a][1] = i1;
+				combinations_gpu[a][2] = i2;
+				a++;
+				// check if buffer is filled
+				if(a == N_WORK_ITEMS)
+				{
+					queue.finish();
+					// receive previously obtained scores
+					queue.enqueueReadBuffer(dev_scores, CL_TRUE, 0, 2 * N_WORK_ITEMS * sizeof(double), scores_gpu);
+					// send buffer of new combinations to device
+					queue.enqueueWriteBuffer(dev_combinations, CL_TRUE, 0, N_WORK_ITEMS * MAX_K * sizeof(int), combinations_gpu);
+					// enqueue OpenCL buffer
+					queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
+
+					// reset GPU buffer iterator
+					a = 0;
+				}
+			}
+		}
+	}
+	for(b = a; b < N_WORK_ITEMS; b++)
+	{
+		// finish updating GPU solutions
+		for(c = 0; c < k; c++)
+			comb[c] = combinations_gpu[b][c];
+		curr_scores[0] = scores_gpu[b][0];
+		curr_scores[1] = scores_gpu[b][1];
+		// add solution to array
+		sol.input(comb, curr_scores[0], curr_scores[1]);
+		add_sol(sols, &sol);
+	}
+
+	// remainder is finished by the GPU
+	queue.finish();
+	queue.enqueueReadBuffer(dev_scores, CL_TRUE, 0, 2 * N_WORK_ITEMS * sizeof(double), scores_gpu);
+	queue.enqueueWriteBuffer(dev_combinations, CL_TRUE, 0, a * MAX_K * sizeof(int), combinations_gpu);
+	queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(a), cl::NDRange(1));	
+
+	// copy results from device to host
+	queue.finish();
+	queue.enqueueReadBuffer(dev_scores, CL_TRUE, 0, 2 * N_WORK_ITEMS * sizeof(double), scores_gpu);
+	for(b = 0; b < a; b++)
+	{
+		// finish updating GPU solutions
+		for(c = 0; c < k; c++)
+			comb[c] = combinations_gpu[b][c];
+		curr_scores[0] = scores_gpu[b][0];
+		curr_scores[1] = scores_gpu[b][1];
+		// add solution to array
+		sol.input(comb, curr_scores[0], curr_scores[1]);
+		add_sol(sols, &sol);
+	}
 	
-    // compute final score and solution
-	score = 100000000.0;
-    for(i = 0; i < N_WORK_ITEMS; i++)
-    {
-        if(scores[i] < score)
-        {
-            score = scores[i];
-            for(j = 0; j < k; j++)
-                sol[j] = sols[i][j];
-        }
-    }
+	// get final array of solutions
+	for(j = 0; j < sols.size(); j++)
+		add_sol(final_sols, &(sols[j]));
+
 
 	time_end = omp_get_wtime();
-    std::cout << "... done!" << std::endl << "K2 Score: " << score << std::endl;
-	std::cout << "Solution: ";
-	for(i = 0; i < k; i++)
-		std::cout << sol[i] << " ";
-	std::cout << std::endl;
+	std::cout << "... done!" << std::endl;
+	std::cout << "Pareto set of solutions:" << std::endl;
+	for(i = 0; i < final_sols.size(); i++)
+	{
+		std::cout << "(K2 = " << final_sols[i].k2_score << ", ME = " << final_sols[i].me_score << ")\t";
+		for(j = 0; j < k; j++)
+			std::cout << final_sols[i].set[j] << " ";
+		std::cout << std::endl;
+	}
 	double interval = double(time_end - time_begin);
 	SNPs.destroy();
 	delete addlogtable;

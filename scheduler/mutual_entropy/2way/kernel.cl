@@ -4,6 +4,7 @@
 #define MAX_R_SIZE 9 // = 3^MAX_K
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
+
 // Returns value from twolog table or log2() result, depending on number
 double twolog(int n, __constant double* addlogtable)
 {
@@ -16,51 +17,12 @@ double twolog(int n, __constant double* addlogtable)
 	}
 }
 
-// Computes n choose r
-unsigned int choose(unsigned int n, unsigned int k)
-{
-    if(k > n)
-		return 0;
-    if(k * 2 > n)
-		k = n - k;
-    if(k == 0)
-		return 1;
-
-    unsigned int result = n;
-    for(int i = 2; i <= k; i++)
-	{
-        result *= (n - i + 1);
-        result /= i;
-    }
-    return result;
-}
-
-// Computes the mth combination in the set of n choose r combinations
-void getcombination(int* comb, int n, int r, int m)
-{
-	int a, b, x, i;
-
-	a = n;
-	b = r;
-	x = choose(n, r) - 1 - m;
-
-	for(i = 0; i < r; i++)
-	{
-		a--;
-		while(choose(a, b) > x)
-			a--;
-		comb[i] = n - 1 - a;
-		x = x - choose(a, b);
-		b--;
-	}
-}
-
-// Computes Bayesian K2 score for a given set of k SNPs
+// Computes ME score for a given set of k SNPs
 double bayesian(int* set, __constant unsigned int* data, __constant unsigned int* states, __constant double* addlogtable)
 {
 	double score, hx, hxy;
 	int i, j, x, r_index;
-	int i0, i1, i2, array[MAX_K];
+	int i0, i1, array[MAX_K];
 	uint4 snps[MAX_K][3], state, result, result0, result1, count0, count1;
 
 	// create frequency vector r
@@ -91,7 +53,6 @@ double bayesian(int* set, __constant unsigned int* data, __constant unsigned int
 				// define array
 				array[0] = i0;
 				array[1] = i1;
-				array[2] = i2;
 
 				// fill frequency table
 				result = snps[0][array[0]];
@@ -126,23 +87,24 @@ double bayesian(int* set, __constant unsigned int* data, __constant unsigned int
 }
 
 
-// Computes K2 score for a combination of SNPs
-__kernel void kernel_bayesian(__global double* scores, __global int* solutions, __global int* combs, __global int* ncombs, __constant unsigned int* data, __constant unsigned int* states, __constant double* addlogtable)
-{	
-	// get thread ID and number of threads
-	size_t t_id = get_global_id(0);
-	size_t n_ts = get_global_size(0);
+// Kernel
+__kernel void kernel_bayesian(__global double* scores, __global int* solutions, __global int* combinations, __constant unsigned int* data, __constant unsigned int* states, __constant double* addlogtable)
+{
+	// get current work item id
+	int t_id = get_global_id(0);
+
+	// create variables to use in score calculation
+	int comb[MAX_K];
+	double curr_score;
 
 	// get combination
-	int comb[MAX_K];
-	comb[0] = combs[t_id * MAX_K + 0];
-	comb[1] = combs[t_id * MAX_K + 1];
+	comb[0] = combinations[t_id * MAX_K + 0];
+	comb[1] = combinations[t_id * MAX_K + 1];
 
-	// update combination index
-	ncombs[t_id] += n_ts;
-
-	// compute the K2 score
-	double curr_score = bayesian(comb, data, states, addlogtable);
+	// compute new score
+	curr_score = bayesian(comb, data, states, addlogtable);
+	
+	// compare score
 	if(curr_score < scores[t_id])
 	{
 		// update score and solution
@@ -150,29 +112,5 @@ __kernel void kernel_bayesian(__global double* scores, __global int* solutions, 
 		solutions[t_id * MAX_K + 0] = comb[0];
 		solutions[t_id * MAX_K + 1] = comb[1];
 	}
-	// end kernel	
-}
-
-// Computes next combination of SNPs
-__kernel void kernel_combo(__global int* combs, __global int* ncombs)
-{
-	// get thread ID
-	size_t t_id = get_global_id(0);
-
-	// compute next combination
-	int comb[MAX_K];
-	if(ncombs[t_id] < NCOMB)
-		getcombination(comb, SIZE, MAX_K, ncombs[t_id]);
-	else
-	{
-		comb[0] = 0;
-		comb[1] = 1;
-		comb[2] = 2;
-	}
-
-	// update combination
-	combs[t_id * MAX_K + 0] = comb[0];
-	combs[t_id * MAX_K + 1] = comb[1];
-	combs[t_id * MAX_K + 2] = comb[2];
-	// end kernel
+	// end of kernel
 }

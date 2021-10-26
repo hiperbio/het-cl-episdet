@@ -19,6 +19,7 @@
 #define N_WORK_ITEMS 76800
 #define N_WORK_ITEMS_PER_GROUP 256
 
+
 // SNP class
 class SNP
 {
@@ -371,30 +372,11 @@ double my_factorial(int n)
 	return z;
 }
 
-// Computes n choose r
-unsigned int choose(unsigned int n, unsigned int k)
-{
-    if(k > n)
-		return 0;
-    if(k * 2 > n)
-		k = n - k;
-    if(k == 0)
-		return 1;
-
-    unsigned int result = n;
-    for(int i = 2; i <= k; i++)
-	{
-        result *= (n - i + 1);
-        result /= i;
-    }
-    return result;
-}
-
 // Main
 int main(int argc, char** argv)
 {
-    int i, i0, i1, i2, j, k, addlogsize, offset;
-
+    int i, i0, i1, j, k, addlogsize, offset;
+	
     k = 2;
 	if(argc == 3)
     {
@@ -407,10 +389,6 @@ int main(int argc, char** argv)
         SNPs.input_data(argv[1]);
     }
     int sol[k];
-
-	// create buffer with information to transfer
-	int ncombs[N_WORK_ITEMS], ncomb;
-	ncomb = choose(SNPs.locisize, k);
 
     // get OpenCL platform and device
     std::vector<cl::Platform> all_platforms;
@@ -445,18 +423,14 @@ int main(int argc, char** argv)
     cl::Program::Sources program_source;
     program_source.push_back({program_string.c_str(), program_string.length() + 1});
     cl::Program program(context, program_source);
-
-    char build_options[100];
-	sprintf(build_options, "-D NCOLS=%d -D SIZE=%d -D NCOMB=%d", SNPs.ncols, SNPs.locisize, ncomb);
+    
+	char build_options[100];
+	sprintf(build_options, "-D NCOLS=%d", SNPs.ncols);
     if(program.build(build_options) != CL_SUCCESS)
     {
         std::cout << "Error building:" << std::endl << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(default_device) << std::endl;
         exit(1);
     }
-
-	// Create OpenCL kernels
-	cl::Kernel kernel_bayesian(program, "kernel_bayesian");
-	cl::Kernel kernel_combo(program, "kernel_combo");
 
     // create OpenCL command queue
     cl::CommandQueue queue(context, default_device);
@@ -470,11 +444,13 @@ int main(int argc, char** argv)
     // create OpenCL buffers on device
     cl::Buffer dev_scores(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * sizeof(double));
     cl::Buffer dev_solutions(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
-    cl::Buffer dev_combs(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
-	cl::Buffer dev_ncombs(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * sizeof(int));
+	cl::Buffer dev_combinations(context, CL_MEM_READ_WRITE, N_WORK_ITEMS * MAX_K * sizeof(int));
     cl::Buffer dev_data(context, CL_MEM_READ_ONLY, (SNPs.nrows - 1) * SNPs.ncols * 3 * sizeof(unsigned int));
     cl::Buffer dev_states(context, CL_MEM_READ_ONLY, SNPs.ncols * sizeof(unsigned int));
     cl::Buffer dev_addlogtable(context, CL_MEM_READ_ONLY, addlogsize * sizeof(double));
+
+    // create buffer with information to transfer
+	int combinations[N_WORK_ITEMS][k];
 
     // copy buffers from host to device
 	offset = 0;
@@ -489,24 +465,18 @@ int main(int argc, char** argv)
 	queue.enqueueWriteBuffer(dev_states, CL_TRUE, 0, SNPs.ncols * sizeof(unsigned int), SNPs.states);
     queue.enqueueWriteBuffer(dev_addlogtable, CL_TRUE, 0, addlogsize * sizeof(double), addlogtable);
 
-	// copy indexes of first combinations to process
-	for(i = 0; i < N_WORK_ITEMS; i++)
-		ncombs[i] = i;
-	queue.enqueueWriteBuffer(dev_ncombs, CL_TRUE, 0, N_WORK_ITEMS * sizeof(int), ncombs);
-
-	// set buffer in device
+	// set buffer containing scores in device
 	queue.enqueueFillBuffer(dev_scores, 100000000.0, 0, N_WORK_ITEMS * sizeof(double));
 
-	// setup OpenCL kernel calls
+	// setup OpenCL kernel call
+    std::cout << "Starting computation of K2 Score..." << std::endl;
+    cl::Kernel kernel_bayesian(program, "kernel_bayesian");
     kernel_bayesian.setArg(0, dev_scores);
     kernel_bayesian.setArg(1, dev_solutions);
-	kernel_bayesian.setArg(2, dev_combs);
-	kernel_bayesian.setArg(3, dev_ncombs);
-    kernel_bayesian.setArg(4, dev_data);
-    kernel_bayesian.setArg(5, dev_states);
-    kernel_bayesian.setArg(6, dev_addlogtable);
-	kernel_combo.setArg(0, dev_combs);
-	kernel_combo.setArg(1, dev_ncombs);
+	kernel_bayesian.setArg(2, dev_combinations);
+    kernel_bayesian.setArg(3, dev_data);
+    kernel_bayesian.setArg(4, dev_states);
+    kernel_bayesian.setArg(5, dev_addlogtable);
 
 	// create buffers to receive results
     double score, scores[N_WORK_ITEMS];
@@ -514,17 +484,37 @@ int main(int argc, char** argv)
 	for(i = 0; i < N_WORK_ITEMS; i++)
 		scores[i] = 100000000.0;
 
-	// run kernel
-	std::cout << "Starting computation of K2 Score..." << std::endl;
+	// start counting time
 	time_begin = omp_get_wtime();
-	for(i = 0; i < ncomb/N_WORK_ITEMS + 1; i++)
+
+	// compute combinations
+	i = 0;
+    for(i0 = 0; i0 <= SNPs.locisize - k; i0++)
 	{
-		queue.enqueueNDRangeKernel(kernel_combo, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
-		queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
+		for(i1 = i0 + 1; i1 < SNPs.locisize; i1++)
+		{
+			combinations[i][0] = i0;
+			combinations[i][1] = i1;
+			i++;
+			if(i == N_WORK_ITEMS)
+			{
+				// make sure queue is clear
+				queue.finish();
+				// update combinations to be processed
+				queue.enqueueWriteBuffer(dev_combinations, CL_TRUE, 0, N_WORK_ITEMS * MAX_K * sizeof(int), combinations);
+				// run OpenCL kernel
+				queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(N_WORK_ITEMS), cl::NDRange(N_WORK_ITEMS_PER_GROUP));
+				i = 0;
+			}
+		}
 	}
+	// run once again for remainder
 	queue.finish();
+	queue.enqueueWriteBuffer(dev_combinations, CL_TRUE, 0, i * MAX_K * sizeof(int), combinations);
+	queue.enqueueNDRangeKernel(kernel_bayesian, cl::NullRange, cl::NDRange(i), cl::NDRange(1));
 
     // copy results from device to host
+	queue.finish();
     queue.enqueueReadBuffer(dev_scores, CL_TRUE, 0, N_WORK_ITEMS * sizeof(double), scores);
     queue.enqueueReadBuffer(dev_solutions, CL_TRUE, 0, N_WORK_ITEMS * MAX_K * sizeof(int), (*sols));
 	

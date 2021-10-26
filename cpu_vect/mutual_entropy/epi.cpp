@@ -6,11 +6,11 @@
 #include <cstring>
 #include <sstream>
 #include <omp.h>
+#include <immintrin.h>
 using namespace std;
 
 // Macros
-#define TABLE_MAX_SIZE 748
-#define TABLE_ERROR -0.0810
+#define TWOLOG_MAX_SIZE 1500
 
 // Classes
 class SNP
@@ -95,6 +95,8 @@ void SNP::generate_data(int num_pac, int num_snp)
 
 	// convert data matrix
 	ncols = ceil(1.0 * ncols / 64);
+	while(ncols % 4 != 0)
+		ncols++;
 	data = new unsigned long**[nrows - 1];
 	for(i = 0; i < nrows - 1; i++)
 	{
@@ -251,6 +253,8 @@ void SNP::input_data(const char* path)
 
 	// convert data matrix
 	ncols = ceil(1.0 * ncols / 64);
+	while(ncols % 4 != 0)
+		ncols++;
 	data = new unsigned long**[nrows - 1];
 	for(i = 0; i < nrows - 1; i++)
 	{
@@ -323,48 +327,30 @@ void SNP::input_data(const char* path)
 
 // Global variables
 SNP SNPs;
-double *addlogtable;
+double *twologtable, hy_me, log2total_me;
+int total_me;
 double time_begin, time_end;
 
 // Functions
 
-// Returns value from addlog table or approximation, depending on number
-double addlog(int n)
+// Returns value from twolog table or log2() result, depending on number
+double twolog(int n)
 {
-	if(n < TABLE_MAX_SIZE)
-		return addlogtable[n];
+	if(n < TWOLOG_MAX_SIZE)
+		return twologtable[n];
 	else
 	{
-		double x = (n + 0.5)*log(n) - (n - 1)*log(exp(1)) + TABLE_ERROR;
+		double x = log2(n);
 		return x;
 	}
 }
 
-// Computes addlog table
-double my_factorial(int n)
-{
-	double i;
-	double z = 0;
-
-	if(n < 0)
-	{
-		printf("Error: n should be a non-negative number.\n");
-		return 0;
-	}
-	if(n == 0)
-		return 0;
-	if(n == 1)
-		return 0;
-
-	z = addlogtable[n - 1] + log(n);
-	return z;
-}
-
-
-void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_index, unsigned long snps[][3], unsigned long state)
+// Fills frequency table for a given
+void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_index, __m256i snps[][3], __m256i state)
 {
     int curr_i, i;
-    unsigned long result, result0, result1;
+    __m256i result, result0, result1;
+	unsigned long aux0[4], aux1[4];
 
     if(prev_i <= 2)
     {
@@ -381,11 +367,16 @@ void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_inde
 				// fill frequency table
                 result = snps[0][array[0]];
                 for(i = 1; i < k; i++)
-                    result = result & snps[i][array[i]];
-                result0 = result & ~state;
-                result1 = result & state;
-                r[*r_index][0] += __builtin_popcountl(result0);
-                r[*r_index][1] += __builtin_popcountl(result1);
+                    result = _mm256_and_si256(result, snps[i][array[i]]);
+                result0 = _mm256_andnot_si256(state, result);
+                result1 = _mm256_and_si256(state, result);
+				_mm256_storeu_si256((__m256i *) aux0, result0);
+				_mm256_storeu_si256((__m256i *) aux1, result1);
+				for(i = 0; i < 4; i++)
+				{
+					r[*r_index][0] += _popcnt64(aux0[i]);
+					r[*r_index][1] += _popcnt64(aux1[i]);
+				}
                 (*r_index)++;
             }
         }
@@ -396,14 +387,15 @@ void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_inde
 // Computes Bayesian K2 score for a given set of k SNPs
 double bayesian(int r_size, int *set, int k)
 {
-	double score;
+	double score, hx, hxy;
 	int i, j, x, r_index, array[k];
 
 	int m = SNPs.nrows;
 	int n = SNPs.ncols;
 	int old_n = SNPs.samplesize;
-	unsigned long snps[k][3], state;
-
+	__m256i snps[k][3], state, mask_v;
+	unsigned long mask[4];
+	
 	// create frequency vector r
 	uint r[r_size][2];
 	for(i = 0; i < r_size; i++)
@@ -413,15 +405,49 @@ double bayesian(int r_size, int *set, int k)
 	}
 
 	// loop data columns
-	for(j = 0; j < n; j++)
+	for(j = 0; j + 3 < n; j += 4)
 	{
 		for(x = 0; x < k; x++)
 		{
-			snps[x][0] = SNPs.data[set[x]][0][j];
-			snps[x][1] = SNPs.data[set[x]][1][j];
-			snps[x][2] = SNPs.data[set[x]][2][j];
+			snps[x][0] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][0][j]));
+			snps[x][1] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][1][j]));
+			snps[x][2] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][2][j]));
 		}
-		state = SNPs.states[j];
+		state = _mm256_loadu_si256((__m256i const *) &(SNPs.states[j]));
+		
+		// fill frequency table
+		r_index = 0;
+		for(i = 0; i <= 2; i++)
+		{
+			array[0] = i;
+			fill_table(array, i, 1, k, r, &r_index, snps, state);
+		}
+	}
+
+	// repeat for remainder
+	if(j < n)
+	{
+		// set mask
+		i = 0;
+		for(x = j; x < n; x++)
+		{
+			mask[i] = 0x8000000000000000;
+			i++;
+		}
+		while(i < 4)
+		{
+			mask[i] = 0;
+			i++;
+		}
+		mask_v = _mm256_loadu_si256((__m256i const *) &(mask[0]));
+
+		for(x = 0; x < k; x++)
+		{
+			snps[x][0] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][0][j]), mask_v);
+			snps[x][1] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][1][j]), mask_v);
+			snps[x][2] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][2][j]), mask_v);
+		}
+		state = _mm256_maskload_epi64((long const *) &(SNPs.states[j]), mask_v);
 
 		// fill frequency table
 		r_index = 0;
@@ -431,12 +457,20 @@ double bayesian(int r_size, int *set, int k)
 			fill_table(array, i, 1, k, r, &r_index, snps, state);
 		}
 	}
-	// compute the K2 score
-	score = 0.0;
-	for(i = 0; i < r_size; i++)
-		score += addlog(r[i][0] + r[i][1] + 1) - addlog(r[i][0]) - addlog(r[i][1]);
-	score = fabs(score);
 
+	// compute the ME score
+	score = 0.0;
+	hx = 0.0;
+	hxy = 0.0;
+	for(i = 0; i < r_size; i++)
+	{
+		hx = hx - (r[i][0] + r[i][1]) * (twolog(r[i][0] + r[i][1]) - log2total_me);
+		hxy = hxy - r[i][0] * (twolog(r[i][0]) - log2total_me);
+		hxy = hxy - r[i][1] * (twolog(r[i][1]) - log2total_me);
+	}
+	score = hy_me + (hx - hxy)/total_me;
+	score = 1/score;
+	
 	return score;
 }
 
@@ -540,6 +574,7 @@ double exhaustive(int k, int* sol)
 		}
 	}
 	time_end = omp_get_wtime();
+
 	return score;
 }
 
@@ -563,26 +598,31 @@ int main(int argc, char **argv)
     }
     int sol[k];
 
-	// create addlog table (up to TABLE_MAX_SIZE positions at max)
-	if(SNPs.samplesize <= TABLE_MAX_SIZE)
-		addlogsize = SNPs.samplesize;
-	else
-		addlogsize = TABLE_MAX_SIZE;
-	addlogtable = new double[addlogsize]();
-	for(i = 0; i < addlogsize; i++)
-		addlogtable[i] = my_factorial(i);
+	// compute global variables
+	total_me = SNPs.samplesize;
+	log2total_me = log2(total_me);
+	hy_me = - (1.0*SNPs.classvalues[0]/total_me) * log2((1.0*SNPs.classvalues[0]/total_me)) - (1.0*SNPs.classvalues[1]/total_me) * log2((1.0*SNPs.classvalues[1]/total_me));
+	
+	// create twolog table (up to TWOLOG_MAX_SIZE positions at max)
+	int twologsize = TWOLOG_MAX_SIZE;
+	twologtable = new double[twologsize]();
+	for(i = 1; i < twologsize; i++)
+		twologtable[i] = log2(i);
+    twologtable[0] = 0.0f;
 
 	// call exhaustive search function
-	cout << "Starting computation of K2 Score..." << endl;
+	cout << "Starting computation of ME Score..." << endl;
 	score = exhaustive(k, sol);
-	cout << "... done!" << endl << "K2 Score: " << score << endl;
+	cout << "... done!" << endl << "ME Score: " << score << endl;
 	cout << "Solution: ";
 	for(i = 0; i < k; i++)
 		cout << sol[i] << " ";
 	cout << endl;
 	double interval = double(time_end - time_begin);
+
+	// free dynamic memory
 	SNPs.destroy();
-	delete addlogtable;
+	delete twologtable;
 
 	// display elapsed time
 	cout << "Total time: " << interval << " s" << endl;

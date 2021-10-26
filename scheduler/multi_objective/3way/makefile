@@ -14,3 +14,4 @@ $(BIN): $(OBJ)
 clean:
 	rm *.o
 	rm $(BIN)
+

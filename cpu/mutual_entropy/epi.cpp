@@ -6,7 +6,6 @@
 #include <cstring>
 #include <sstream>
 #include <omp.h>
-#include <immintrin.h>
 using namespace std;
 
 // Macros
@@ -345,12 +344,10 @@ double twolog(int n)
 	}
 }
 
-// Fills frequency table for a given
-void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_index, __m256i snps[][3], __m256i state)
+void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_index, unsigned long snps[][3], unsigned long state)
 {
     int curr_i, i;
-    __m256i result, result0, result1;
-	unsigned long aux0[4], aux1[4];
+    unsigned long result, result0, result1;
 
     if(prev_i <= 2)
     {
@@ -367,16 +364,11 @@ void fill_table(int *array, int prev_i, int pos, int k, uint r[][2], int *r_inde
 				// fill frequency table
                 result = snps[0][array[0]];
                 for(i = 1; i < k; i++)
-                    result = _mm256_and_si256(result, snps[i][array[i]]);
-                result0 = _mm256_andnot_si256(state, result);
-                result1 = _mm256_and_si256(state, result);
-				_mm256_storeu_si256((__m256i *) aux0, result0);
-				_mm256_storeu_si256((__m256i *) aux1, result1);
-				for(i = 0; i < 4; i++)
-				{
-					r[*r_index][0] += _popcnt64(aux0[i]);
-					r[*r_index][1] += _popcnt64(aux1[i]);
-				}
+                    result = result & snps[i][array[i]];
+                result0 = result & ~state;
+                result1 = result & state;
+                r[*r_index][0] += __builtin_popcountl(result0);
+                r[*r_index][1] += __builtin_popcountl(result1);
                 (*r_index)++;
             }
         }
@@ -393,9 +385,8 @@ double bayesian(int r_size, int *set, int k)
 	int m = SNPs.nrows;
 	int n = SNPs.ncols;
 	int old_n = SNPs.samplesize;
-	__m256i snps[k][3], state, mask_v;
-	unsigned long mask[4];
-	
+	unsigned long snps[k][3], state;
+
 	// create frequency vector r
 	uint r[r_size][2];
 	for(i = 0; i < r_size; i++)
@@ -405,49 +396,15 @@ double bayesian(int r_size, int *set, int k)
 	}
 
 	// loop data columns
-	for(j = 0; j + 3 < n; j += 4)
+	for(j = 0; j < n; j++)
 	{
 		for(x = 0; x < k; x++)
 		{
-			snps[x][0] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][0][j]));
-			snps[x][1] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][1][j]));
-			snps[x][2] = _mm256_loadu_si256((__m256i const *) &(SNPs.data[set[x]][2][j]));
+			snps[x][0] = SNPs.data[set[x]][0][j];
+			snps[x][1] = SNPs.data[set[x]][1][j];
+			snps[x][2] = SNPs.data[set[x]][2][j];
 		}
-		state = _mm256_loadu_si256((__m256i const *) &(SNPs.states[j]));
-		
-		// fill frequency table
-		r_index = 0;
-		for(i = 0; i <= 2; i++)
-		{
-			array[0] = i;
-			fill_table(array, i, 1, k, r, &r_index, snps, state);
-		}
-	}
-
-	// repeat for remainder
-	if(j < n)
-	{
-		// set mask
-		i = 0;
-		for(x = j; x < n; x++)
-		{
-			mask[i] = 0x8000000000000000;
-			i++;
-		}
-		while(i < 4)
-		{
-			mask[i] = 0;
-			i++;
-		}
-		mask_v = _mm256_loadu_si256((__m256i const *) &(mask[0]));
-
-		for(x = 0; x < k; x++)
-		{
-			snps[x][0] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][0][j]), mask_v);
-			snps[x][1] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][1][j]), mask_v);
-			snps[x][2] = _mm256_maskload_epi64((long const *) &(SNPs.data[set[x]][2][j]), mask_v);
-		}
-		state = _mm256_maskload_epi64((long const *) &(SNPs.states[j]), mask_v);
+		state = SNPs.states[j];
 
 		// fill frequency table
 		r_index = 0;
@@ -529,8 +486,8 @@ double exhaustive(int k, int* sol)
 	int solutions[omp_get_max_threads()][k], x, j, r_size;
 
 	r_size = (int) pow(3.0, k);
-
-	time_begin = omp_get_wtime();
+	
+    time_begin = omp_get_wtime();
 	#pragma omp parallel
 	{
 		int i, t_id, comb[k], best_sol[k], position, size, t_count;
@@ -574,7 +531,6 @@ double exhaustive(int k, int* sol)
 		}
 	}
 	time_end = omp_get_wtime();
-
 	return score;
 }
 
@@ -610,7 +566,6 @@ int main(int argc, char **argv)
 		twologtable[i] = log2(i);
     twologtable[0] = 0.0f;
 
-	// call exhaustive search function
 	cout << "Starting computation of ME Score..." << endl;
 	score = exhaustive(k, sol);
 	cout << "... done!" << endl << "ME Score: " << score << endl;
@@ -619,8 +574,6 @@ int main(int argc, char **argv)
 		cout << sol[i] << " ";
 	cout << endl;
 	double interval = double(time_end - time_begin);
-
-	// free dynamic memory
 	SNPs.destroy();
 	delete twologtable;
 
