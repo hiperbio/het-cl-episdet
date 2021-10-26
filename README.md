@@ -6,7 +6,7 @@
     
 </p>
 
-This repository contains the implementations of exhaustive epistasis detection for second and third-order interaction searches, targeting Intel CPUs, GPUs and CPU+GPU systems. It supports single-objective and multi-objective evaluations with K2 score and Mutual Entropy scoring functions. The CPU implementations are parallelized by using OpenMP, while GPU kernels are deployed with the OpenCL programming model.
+This repository contains the implementations of exhaustive epistasis detection for second and third-order interaction searches, targeting Intel CPUs, GPUs and CPU+GPU systems. It supports single-objective and multi-objective evaluations with Bayesian K2 score and Mutual Entropy scoring functions. The CPU implementations are parallelized by using OpenMP, while GPU kernels are deployed with the OpenCL programming model.
 
 ## What is Epistasis Detection?
 
@@ -17,56 +17,67 @@ Finding new associations between genotype and phenotype can contribute to improv
 
 The repository is structured as follows:
 
-* cpu: Contains the
-* cpu_vec: Contains the 
-* gpu: Contains the
-* scheduler: Contains the
-* heterogeneous: Contains the  
+* cpu: Contains the CPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
+* cpu_vect: Contains the CPU-only implementations using vectorization intrinsics for single-objective Bayesian K2 and Mutual Entropy scores.
+* gpu: Contains the GPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
+* scheduler: Contains the scheduler implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
+* heterogeneous: Contains the heterogeneous implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
 
-**Note: The implementations contained in the scheduler and gpu folders were only tested on Intel GPUs with Gen9.5 micro-architecture. Deploying these applications on other GPUs might require some changes in the code.**
+**Note: The implementations contained in the heterogeneous, scheduler and gpu folders were only tested on Intel GPUs with Gen9.5 micro-architecture. Deploying these applications on other GPUs might require some changes in the code.**
 
 
 ## Setup
 
 ### Requirements
 
-* OpenCL (version xxxxx or more recent)
+* OpenCL (version 1.2 or more recent)
 * OpenMP
 * Intel Compiler (Not tested with other compilers)
 
 ### Compilation
 
-Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using K2 Bayesian scoring:
+Compiling binaries (`epi_k2` and `epi_k3`) in folders `gpu`, `scheduler` and `heterogeneous` for performing 2-way and 3-way searches using K2 Bayesian scoring:
 
 * 2-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/k2_bayesian/2way && make
 ```
 * 3-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/k2_bayesian/3way && make
 ```
 
-Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using Mutual Entropy scoring:
+Compiling binaries (`epi_k2` and `epi_k3`) in folders `gpu`, `scheduler` and `heterogeneous` for performing 2-way and 3-way searches using Mutual Entropy scoring:
 
 * 2-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/mutual_entropy/2way && make
 ```
 * 3-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/mutual_entropy/3way && make
 ```
 
-Compiling binary (`<binary_name>`) for performing 2-way and 3-way searches using multi-objective evaluation (K2 score and Mutual Entropy):
+Compiling binaries (`epi_k2` and `epi_k3`) in folders `scheduler` and `heterogeneous`for performing 2-way and 3-way searches using multi-objective evaluation (K2 score and Mutual Entropy):
 
 * 2-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/multi_objective/2way && make
 ```
 * 3-way:
 ```bash
-$ cd <some_folder> && make
+$ cd <folder>/multi_objective/3way && make
+```
+
+Compiling binary (`epi`) in folders `cpu` and `cpu_vect`for performing 2-way or 3-way searches using multi-objective evaluation (K2 score and Mutual Entropy):
+
+* K2 score:
+```bash
+$ cd <folder>/k2_bayesian && make
+```
+* Mutual Entropy:
+```bash
+$ cd <folder>/mutual_entropy && make
 ```
 
 ## Usage example
