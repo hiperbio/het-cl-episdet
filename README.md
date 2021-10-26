@@ -17,13 +17,13 @@ Finding new associations between genotype and phenotype can contribute to improv
 
 The repository is structured as follows:
 
-* cpu: Contains the CPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
-* cpu_vect: Contains the CPU-only implementations using vectorization intrinsics for single-objective Bayesian K2 and Mutual Entropy scores.
-* gpu: Contains the GPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
-* scheduler: Contains the scheduler implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
-* heterogeneous: Contains the heterogeneous implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
+* `cpu`: Contains the CPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
+* `cpu_vect`: Contains the CPU-only implementations using vectorization intrinsics for single-objective Bayesian K2 and Mutual Entropy scores.
+* `gpu`: Contains the GPU-only implementations for single-objective Bayesian K2 and Mutual Entropy scores.
+* `scheduler`: Contains the scheduler implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
+* `heterogeneous`: Contains the heterogeneous implementations for single and multi-objective Bayesian K2 and Mutual Entropy scores.
 
-**Note: The implementations contained in the heterogeneous, scheduler and gpu folders were only tested on Intel GPUs with Gen9.5 micro-architecture. Deploying these applications on other GPUs might require some changes in the code.**
+**Note: The implementations contained in the `heterogeneous`, `scheduler` and `gpu` folders were only tested on Intel GPUs with Gen9.5 micro-architecture. Deploying these applications on other GPUs might require some changes in the code.**
 
 
 ## Setup
