@@ -69,7 +69,7 @@ $ cd <folder>/multi_objective/2way && make
 $ cd <folder>/multi_objective/3way && make
 ```
 
-Compiling binary (`epi`) in folders `cpu` and `cpu_vect`for performing 2-way or 3-way searches using multi-objective evaluation (K2 score and Mutual Entropy):
+Compiling binary (`epi`) in folders `cpu` and `cpu_vect` for performing 2-way or 3-way searches using K2 score or Mutual Entropy:
 
 * K2 score:
 ```bash
