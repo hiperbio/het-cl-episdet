@@ -13,6 +13,19 @@ This repository contains the implementations of exhaustive epistasis detection f
 Epistasis detection is a computationally complex bioinformatics application with significant societal impact. It is used in the search of new correlations between genetic markers, such as single-nucleotide polymorphisms (SNPs), and phenotype (e.g. a particular disease state).
 Finding new associations between genotype and phenotype can contribute to improved preventive care, personalized treatments and to the development of better drugs for more conditions.
 
+## Description
+
+The repository is structured as follows:
+
+* cpu: Contains the
+* cpu_vec: Contains the 
+* gpu: Contains the
+* scheduler: Contains the
+* heterogeneous: Contains the  
+
+**Note: The implementations contained in the scheduler and gpu folders were only tested on Intel GPUs with Gen9.5 micro-architecture. Deploying these applications on other GPUs might require some changes in the code.**
+
+
 ## Setup
 
 ### Requirements
