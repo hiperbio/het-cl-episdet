@@ -80,7 +80,15 @@ $ cd <folder>/k2_bayesian && make
 $ cd <folder>/mutual_entropy && make
 ```
 
+**Note: Depending on the OpenCL version, it might be necessary to change the header file from CL/opencl.hpp to CL/cl2.hpp.**
+
 ## Usage example
+
+To run on Intel GPUs, might be necessary to disable the hangcheck with the command:
+
+```bash
+echo 0 | sudo tee /sys/module/i915/parameters/enable_hangcheck
+```
 
 **Scheduler/Heterogeneous/GPU-only versions:** Running a 3-way search with a synthetic dataset with 1000 SNPs (166,167,000 triplets of SNPs to evaluate) and 4000 samples:
 
