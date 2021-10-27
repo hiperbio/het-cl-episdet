@@ -136,8 +136,6 @@ BibTeX:
     address="Cham",
     pages="613--628",
     isbn="978-3-030-57675-2"
-}
 
-<!--For additional readings in high-throughput epistasis detection, you can take a look at our IPDPS 2020 and JSSPP 2020 papers.-->
 
 
