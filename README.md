@@ -105,7 +105,7 @@ $ ./epi 4000 1000 3
 ```bash
 $ ./epi <root>/data_sets/db_1000SNPs_4000pac.txt 3
 ```
-**Note: The input files containted in the folder data_sets are in a binarized format, with the SNPs displaced in columns and the samples in rows.**
+**Note: The input files containted in the folder data_sets have the SNPs displaced in columns and the samples in rows.**
 
 ## In papers and reports, please refer to this tool as follows
 
